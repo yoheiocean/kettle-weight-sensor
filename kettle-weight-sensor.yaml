@@ -1,0 +1,124 @@
+esphome:
+  name: kettle-weight-sensor
+  friendly_name: Kettle Weight Sensor
+
+esp32:
+  board: esp32dev
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "P3NP9paZ7F8+hv6QqXZzPaZyDXLL76odEP0GHnwn+6w="
+
+ota:
+  - platform: esphome
+    password: "74ea1efd387c306b2f56d08188170684"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Kettle-Weight-Sensor"
+    password: "Rg1Fq30udQCU"
+
+captive_portal:
+
+# Web Portal
+web_server:
+  port: 80
+
+# HX711 Load Sensor
+sensor:
+  - platform: hx711
+    name: "HX711 Value"
+    dout_pin: GPIO19 #Any pin
+    clk_pin: GPIO18 # Any pin
+    gain: 128
+    update_interval: 2s
+    accuracy_decimals: 1
+    unit_of_measurement: L
+    id: load_sensor
+    filters:
+      - calibrate_linear: # Sensor reading -> Known measurement
+          - 241100 -> 0
+          - 276900 -> 1.7
+      - lambda: |-
+          if (x < 0.0) {x = 0.0;}
+          return x;
+    on_value_range: 
+      - below: 0.5
+        then: 
+          - light.turn_on:
+              id: gauge_led
+              red: 100%
+              green: 0%
+              blue: 0%
+              effect: Pulse
+      - above: 0.5
+        below: 0.8
+        then: 
+          - light.turn_on:
+              id: gauge_led
+              red: 100%
+              green: 0%
+              blue: 0%
+              effect: none
+      - above: 0.8
+        below: 1.2
+        then:
+          - light.turn_on:
+              id: gauge_led
+              red: 100%
+              green: 70%
+              blue: 0%
+              effect: none
+      - above: 1.2
+        then:
+          - light.turn_on:
+              id: gauge_led
+              red: 0%
+              green: 100%
+              blue: 0%
+              effect: none
+
+# SSD1306 OLED I2C
+i2c:
+  sda: GPIO21 # I2C SDA pin
+  scl: GPIO22 # I2C SCL pin
+
+display:
+  - platform: ssd1306_i2c
+    model: "SSD1306 128x64"
+    reset_pin: GPIO23
+    address: 0x3C
+    lambda: |-
+      float load_sensor_value = id(load_sensor).state;
+      float absolute_value = abs(load_sensor_value);
+      it.printf(5, 20, id(pixelmix), " %.1f L", absolute_value);
+
+# Fonts (The font file is saved on the host.)
+font: 
+  - file: "fonts/pixelmix.ttf"
+    id: pixelmix
+    size: 30
+
+# Light Component
+light:
+  - platform: esp32_rmt_led_strip
+    rgb_order: GRB
+    pin: GPIO17 # Any pin
+    rmt_channel: 0
+    num_leds: 3
+    chipset: WS2812
+    name: "Gauge LED Strip"
+    id: gauge_led
+    effects:
+      - pulse: 
+
